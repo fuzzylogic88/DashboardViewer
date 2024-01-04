@@ -12,7 +12,7 @@ from PyQt5.QtNetwork import *
 import platform
 import sys
 
-# URL File Locations:
+# URL File Locations (one URL per line):
 URL_FILE_PATH_WINDOWS = "C:\\DBurl.txt"
 URL_FILE_PATH_LINUX = "/home/pi/DBurl.txt"
 
@@ -50,11 +50,14 @@ class Browser(QWebView):
             self.current_index = 0
         
         # kick off a new timer, and add to collection of timers...
-        timer = QTimer(self)
-        timer.setSingleShot(True)
-        timer.timeout.connect(self.load_next_url)
-        timer.start(DEFAULT_DELAY_MS)
-        self.timers.append(timer)
+        if self.current_index > 0:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.timeout.connect(self.load_next_url)
+            timer.start(DEFAULT_DELAY_MS)
+            self.timers.append(timer)
+        else:
+            self.load_next_url()
     
     # Cancels current timer and loads the next URL in the queue
     def skip_timers(self):
