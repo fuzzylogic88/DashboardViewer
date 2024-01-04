@@ -1,6 +1,8 @@
 # DBViewer
 #
 # A small kiosk-style utility to view webpages from a SFF PC / RPi
+#
+# Press right arrow key to move to next URL, down arrow key to stop cycle, ESC to exit.
 
 from PyQt5.QtCore import QUrl, QTimer, Qt
 from PyQt5.QtGui import QKeySequence
@@ -60,14 +62,17 @@ class Browser(QWebView):
             self.load_next_url()
     
     # Cancels current timer and loads the next URL in the queue
-    def skip_timers(self):
-        print("Cancelling timers and skipping to next URL")
+    def skip_timers(self, load_next):
+        print("Cancelling active timers")
         for timer in self.timers:
             timer.stop()
             timer.timeout.disconnect()
             timer.deleteLater()
         self.timers.clear()
-        self.load_next_url()
+        
+        if (load_next):
+            print("Jumping to next URL")
+            self.load_next_url()
     
     def adjustTitle(self):
         self.setWindowTitle(self.title())
@@ -90,13 +95,15 @@ def main():
 
     # define which keypresses to monitor for
     window.close_shortcut = QShortcut(QKeySequence(Qt.Key_Escape),window)
-    window.skip_url_shortcut = QShortcut(QKeySequence(Qt.Key_Space),window)
+    window.skip_url_shortcut = QShortcut(QKeySequence(Qt.Key_Right),window)
+    window.stop_timers_shortcut = QShortcut(QKeySequence(Qt.Key_Down),window)
     
     # attach our shortcuts to functions to create keyboard event handlers
     window.close_shortcut.activated.connect(window.close)
-    window.skip_url_shortcut.activated.connect(window.skip_timers)
+    window.skip_url_shortcut.activated.connect(lambda: window.skip_timers(True))
+    window.stop_timers_shortcut.activated.connect(lambda: window.skip_timers(False))
     
-    window.setWindowTitle('Loading dashboard...')
+    window.setWindowTitle('Loading...')
     
     # change window title on new connections
     window.titleChanged.connect(window.adjustTitle)
