@@ -18,7 +18,7 @@ import sys
 URL_FILE_PATH_WINDOWS = "C:\\DBurl.txt"
 URL_FILE_PATH_LINUX = "/home/pi/DBurl.txt"
 
-DEFAULT_DELAY_MS = 15000
+DEFAULT_DELAY_MS = 30000
 
 globalFPath = ''
 urlList = ['']
