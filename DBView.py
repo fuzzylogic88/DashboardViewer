@@ -16,9 +16,9 @@ import sys
 
 # URL File Locations (one URL per line):
 URL_FILE_PATH_WINDOWS = "C:\\DBurl.txt"
-URL_FILE_PATH_LINUX = "/home/pi/DBurl.txt"
+URL_FILE_PATH_LINUX = "DBurl.txt"
 
-DEFAULT_DELAY_MS = 30000
+DEFAULT_DELAY_MS = 150000
 
 globalFPath = ''
 urlList = ['']
