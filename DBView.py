@@ -6,104 +6,166 @@
 
 from PyQt5.QtCore import QUrl, QTimer, Qt
 from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWidgets import QApplication, QShortcut
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox, QShortcut
 from PyQt5.QtWebEngineWidgets import QWebEngineView as QWebView
-from PyQt5.QtWebEngineWidgets import QWebEngineSettings as QWebSettings
 from PyQt5.QtNetwork import *
 
 import sys
 import os
+import re
 
 # File Locations (one item per line):
 ContentFilePath = "DBViewContent.txt"
-DEFAULT_DELAY_MS = 15000
+DEFAULT_DELAY_MS = 10000
 
 contentList = ['']
 
-class Browser(QWebView):
+class MainWindow(QMainWindow):
     def __init__(self, contentList):
-        super(Browser,self).__init__()
-        
-        self.timers = []
+        super(MainWindow,self).__init__()   
+
         self.contentList = load_url_from_file(ContentFilePath)
+
+        if len(self.contentList) == 0:
+            self.empty_list_error()
+
+        self.current_timer = QTimer(self)
+        self.remaining_time = 0
+        self.timers_are_paused = False
         self.current_index = 0
 
+         # Set up the central widget (QWebView)
+        self.webview = QWebView(self)
+
+        # Set up the pause control
+        self.SetupLabel()
+    
+    def empty_list_error(self):
+        app = QApplication(sys.argv)
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.critical)
+        msg_box.setText(f'{ContentFilePath} contains no data.')
+        msg_box.setWindowTitle("Fatal Error")
+        msg_box.exec_()
+        app.quit()
+        
+    def SetupLabel(self):
+        # Create a layout for the central widget
+        layout = QVBoxLayout()
+
+        # Create a pause overlay label
+        self.pause_label = QLabel("PAUSED", self)
+        self.pause_label.setAlignment(Qt.AlignCenter)
+        self.pause_label.setStyleSheet("background-color: rgba(64, 222, 251, 128); font-size: 32px;")
+        self.pause_label.setFixedSize(150, 60)  # Adjust width and height as needed
+        self.pause_label.hide()
+
+        # Add the layout to the central widget
+        central_widget = QWidget()
+        central_widget.setLayout(layout)
+
+        # Set up the initial content within the central widget
+        self.webview.page().setView(central_widget)
+        self.setCentralWidget(self.webview)
+
     def load(self,url):
-        self.setUrl(QUrl(url))
+        self.webview.setUrl(QUrl(url))
     
     def load_next_url(self):         
-        # move though list of items, selecting new content by index
-        if self.current_index < len(self.contentList):
-            url = self.contentList[self.current_index] 
+       
+            if (self.current_index < len(self.contentList)):          
+                url = self.contentList[self.current_index] 
             
-            # differentiate between local files / embedded html, and URLs
-            item_is_a_file = os.path.exists(url)           
-            if item_is_a_file or url.startswith("<"):
-                self.setHtml(generate_html(url, item_is_a_file),QUrl('file:///'))
+                # differentiate between local files / embedded html, and URLs
+                item_is_a_file = os.path.exists(url)           
+                if item_is_a_file or url.startswith("<"):
+                    self.webview.setHtml(generate_html(url, item_is_a_file), QUrl(f'file:///{url}'))
+                else:
+                    self.webview.setUrl(QUrl(url))
+                self.current_index += 1     
+
             else:
-                self.setUrl(QUrl(url))
-                
-            self.current_index += 1
-        else:
-            # start from the beginning of the collection
-            self.current_index = 0
+                # start from the beginning of the collection
+                self.current_index = 0
+
+            if not self.current_timer is None:
+                if self.current_timer.isActive():
+                    return
+          
+            # Start a new timer
+            if self.current_index > 0:
+                print(f"Starting new timer with content at index {self.current_index}")
+                self.current_timer = QTimer(self)
+                self.current_timer.setSingleShot(True)
+                self.current_timer.timeout.connect(self.load_next_url)
+                self.current_timer.start(DEFAULT_DELAY_MS)
+            else:
+                self.load_next_url()
         
-        # kick off a new timer, and add to collection of timers...
-        if self.current_index > 0:
-            timer = QTimer(self)
-            timer.setSingleShot(True)
-            timer.timeout.connect(self.load_next_url)
-            timer.start(DEFAULT_DELAY_MS)
-            self.timers.append(timer)
-        else:
-            self.load_next_url()
-    
     # Cancels current timer and loads the next item in the queue
-    def skip_timers(self, load_next):
-        print("Cancelling active timers")
-        for timer in self.timers:
-            timer.stop()
-            timer.timeout.disconnect()
-            timer.deleteLater()
-        self.timers.clear()
-        
-        if (load_next):
+    def navigate_content(self, load_forward): 
+        self.pause_label.setVisible(False)      
+
+        if (not load_forward):
+            print("Loading previous item")
+            if (self.current_index - 2 >= 0):
+                self.current_index -= 2
+            else:
+                self.current_index = len(self.contentList) - 1
+        else:
             print("Jumping to next item")
-            self.load_next_url()
-    
+
+        self.load_next_url()     
+
+    def pause_cycle(self):
+        if self.current_timer.isActive():
+            print(f'Timer paused with {self.current_timer.remainingTime()}ms remaining')
+            self.remaining_time = self.current_timer.remainingTime()
+            self.pause_label.setVisible(True)
+            self.current_timer.stop()
+        else:
+            print(f'Timer resumed with {self.remaining_time}ms remaining')
+            self.pause_label.setVisible(False)
+            self.current_timer.start(self.remaining_time)
+
+    # stops active timer and notes remaining time, supposing we wanted to continue
+    def stop_active_timer(self):
+        print("Stopping active timers")
+        self.current_timer.stop()
+        self.current_timer.timeout.disconnect()
+        self.current_timer.deleteLater()
+
     def adjustTitle(self):
-        self.setWindowTitle(self.title())
-    
-    def userAgentForUrl(self):
-        ''' Returns a User Agent that will be seen by the website. '''
-        return "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"
-    
-    def disableJS(self):
-        settings = QWebSettings.globalSettings()
-        settings.setAttribute(QWebSettings.JavascriptEnabled, False)
+        self.setWindowTitle(self.webview.title())
 
 def main():
     app = QApplication(sys.argv)   
-    window = Browser(contentList)
-    
+    window = MainWindow(contentList)
+
     # creates a borderless window and displays the content fullscreen
     window.setWindowFlags(Qt.FramelessWindowHint)
     window.showFullScreen()
 
+    # windowed for debug
+    #window.setGeometry(100, 100, 800, 600)  # Set the desired width and height
+    #window.show()
+
     # define which keypresses to monitor for
     window.close_shortcut = QShortcut(QKeySequence(Qt.Key_Escape),window)
-    window.skip_url_shortcut = QShortcut(QKeySequence(Qt.Key_Right),window)
-    window.stop_timers_shortcut = QShortcut(QKeySequence(Qt.Key_Down),window)
+    window.next_item_shortcut = QShortcut(QKeySequence(Qt.Key_Right),window)
+    window.prev_item_shortcut = QShortcut(QKeySequence(Qt.Key_Left),window)
+    window.pause_timer_shortcut = QShortcut(QKeySequence(Qt.Key_Down),window)
     
     # attach our shortcuts to functions to create keyboard event handlers
     window.close_shortcut.activated.connect(window.close)
-    window.skip_url_shortcut.activated.connect(lambda: window.skip_timers(True))
-    window.stop_timers_shortcut.activated.connect(lambda: window.skip_timers(False))
+    window.next_item_shortcut.activated.connect(lambda: window.navigate_content(True))
+    window.prev_item_shortcut.activated.connect(lambda: window.navigate_content(False))
+    window.pause_timer_shortcut.activated.connect(window.pause_cycle)
     
     window.setWindowTitle('Loading...')
     
     # change window title on new connections
-    window.titleChanged.connect(window.adjustTitle)
+    window.webview.titleChanged.connect(window.adjustTitle)
     
     # kick off our content load-loop
     window.load_next_url()
@@ -118,9 +180,8 @@ def load_url_from_file(fpath):
 def generate_html(item, item_is_a_file):
     raw_html = ''
 
-    # images
-    if (item_is_a_file):
-        
+    # Image files
+    if (item_is_a_file):       
         image_path = 'file:///'
         image_path +=  os.path.abspath(item)
         
@@ -146,14 +207,18 @@ def generate_html(item, item_is_a_file):
                 <img src="{image_path}" alt="BigImage">
             </body>
             </html>
-            '''          
-    
+            '''             
     # embedded HTML    
     else:
         raw_html = '<html><head><meta charset="utf-8" /><body>'
         raw_html += item
         raw_html += '</body></html>'
-    
+
+        # Regular expression to find width and height attributes
+        pattern = re.compile(r'width="(\d+)" height="(\d+)"')
+
+        # Replace width and height attributes with fullscreen style attribute
+        raw_html = re.sub(pattern, r'style="min-width: 100%; min-height: 100vh;"', raw_html)   
     return raw_html
   
 if __name__ == "__main__":
