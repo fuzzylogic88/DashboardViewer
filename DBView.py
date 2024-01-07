@@ -5,7 +5,7 @@
 # Press right arrow key to move to next URL, down arrow key to stop cycle, ESC to exit.
 
 from PyQt5.QtCore import QUrl, QTimer, Qt
-from PyQt5.QtGui import QKeySequence
+from PyQt5.QtGui import QKeySequence, QFontDatabase, QFont
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox, QShortcut
 from PyQt5.QtWebEngineWidgets import QWebEngineView as QWebView
 from PyQt5.QtNetwork import *
@@ -16,6 +16,7 @@ import re
 
 # File Locations (one item per line):
 ContentFilePath = "DBViewContent.txt"
+FontFilePath = "fnt.ttf"
 DEFAULT_DELAY_MS = 10000
 
 contentList = ['']
@@ -24,42 +25,46 @@ class MainWindow(QMainWindow):
     def __init__(self, contentList):
         super(MainWindow,self).__init__()   
 
+        self.webview = QWebView(self)
+        # Set up the pause control
+        self.SetupLabels()
+
         self.contentList = load_url_from_file(ContentFilePath)
 
         if len(self.contentList) == 0:
-            self.empty_list_error()
+            self.no_content_label.show()
 
         self.current_timer = QTimer(self)
         self.remaining_time = 0
         self.timers_are_paused = False
         self.current_index = 0
-
-         # Set up the central widget (QWebView)
-        self.webview = QWebView(self)
-
-        # Set up the pause control
-        self.SetupLabel()
-    
-    def empty_list_error(self):
-        app = QApplication(sys.argv)
-        msg_box = QMessageBox()
-        msg_box.setIcon(QMessageBox.critical)
-        msg_box.setText(f'{ContentFilePath} contains no data.')
-        msg_box.setWindowTitle("Fatal Error")
-        msg_box.exec_()
-        app.quit()
         
-    def SetupLabel(self):
+    def SetupLabels(self):
         # Create a layout for the central widget
         layout = QVBoxLayout()
+
+        # Load font from local file to use for labels
+        if os.path.exists(FontFilePath):  
+            font_id = QFontDatabase.addApplicationFont(FontFilePath)
+            font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
+            font = QFont(font_family)
+        else:
+            self.missing_font_error()
 
         # Create a pause overlay label
         self.pause_label = QLabel("PAUSED", self)
         self.pause_label.setAlignment(Qt.AlignCenter)
+        self.pause_label.setFont(font)
         self.pause_label.setStyleSheet("background-color: rgba(64, 222, 251, 128); font-size: 32px;")
         self.pause_label.setFixedSize(150, 60)  # Adjust width and height as needed
         self.pause_label.hide()
 
+        self.no_content_label = QLabel("No content to display!", self)
+        self.no_content_label.setAlignment(Qt.AlignCenter)
+        self.no_content_label.setFont(font)
+        self.no_content_label.setStyleSheet("background-color: rgba(0, 150, 211, 128); font-size: 48px;")
+        self.no_content_label.hide()
+        
         # Add the layout to the central widget
         central_widget = QWidget()
         central_widget.setLayout(layout)
@@ -67,6 +72,19 @@ class MainWindow(QMainWindow):
         # Set up the initial content within the central widget
         self.webview.page().setView(central_widget)
         self.setCentralWidget(self.webview)
+    
+    def missing_font_error(self):
+        app = QApplication(sys.argv)
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.Critical)
+        msg_box.setText(f'Local font file "{FontFilePath}" not found!')
+        msg_box.setWindowTitle("Fatal error")
+        msg_box.exec_()
+        app.quit()
+
+    def resizeEvent(self, event):
+        # Resize the label to match the window size
+        self.no_content_label.setGeometry(self.rect())
 
     def load(self,url):
         self.webview.setUrl(QUrl(url))
@@ -141,14 +159,15 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)   
     window = MainWindow(contentList)
+    window.setWindowTitle('DBView')
 
     # creates a borderless window and displays the content fullscreen
-    window.setWindowFlags(Qt.FramelessWindowHint)
-    window.showFullScreen()
+    #window.setWindowFlags(Qt.FramelessWindowHint)
+    #window.showFullScreen()
 
     # windowed for debug
-    #window.setGeometry(100, 100, 800, 600)  # Set the desired width and height
-    #window.show()
+    window.setGeometry(100, 100, 800, 600)  # Set the desired width and height
+    window.show()
 
     # define which keypresses to monitor for
     window.close_shortcut = QShortcut(QKeySequence(Qt.Key_Escape),window)
@@ -162,13 +181,12 @@ def main():
     window.prev_item_shortcut.activated.connect(lambda: window.navigate_content(False))
     window.pause_timer_shortcut.activated.connect(window.pause_cycle)
     
-    window.setWindowTitle('Loading...')
-    
     # change window title on new connections
     window.webview.titleChanged.connect(window.adjustTitle)
     
-    # kick off our content load-loop
-    window.load_next_url()
+    # kick off our content load-loop if we have content to show
+    if len(window.contentList) > 0:
+        window.load_next_url()
     sys.exit(app.exec_())
 
 # reads data from filepath established during '__init__'
