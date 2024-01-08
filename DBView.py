@@ -15,10 +15,10 @@ import sys
 import os
 import re
 
-# File Locations (one item per line):
+# File Locations, CASE SENSITIVE!:
 ContentFilePath = "DBViewContent.txt"
-FontFilePath = "fnt.ttf"
-DEFAULT_DELAY_MS = 15000
+FontFilePath = "fnt.TTF"
+DEFAULT_DELAY_MS = 60000
 
 contentList = ['']
 
@@ -116,11 +116,12 @@ class MainWindow(QMainWindow):
                 self.current_index = 0
 
         # differentiate between local files / embedded html, and URLs
-        item_is_a_file = os.path.exists(url)                
-        if item_is_a_file or url.startswith("<"):
-            self.webview.setHtml(generate_html(url, item_is_a_file), QUrl(f'file:///{url}'))
-        else:
-            self.webview.setUrl(QUrl(url))
+        if url is not None:
+            item_is_a_file = os.path.exists(url)                
+            if item_is_a_file or url.startswith("<"):
+                self.webview.setHtml(generate_html(url, item_is_a_file), QUrl(f'file:///{url}'))
+            else:
+                self.webview.setUrl(QUrl(url))
 
         # If a timer is running and we've not manually defined a source
         # wait for it to copmlete before making a new one.
