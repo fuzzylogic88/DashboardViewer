@@ -3,11 +3,12 @@
 # A small kiosk-style utility to view webpages from a SFF PC / RPi
 #
 # Press right arrow key to move to next URL, down arrow key to stop cycle, ESC to exit.
+# Press up arrow to enter URL manually (helpful for SSO auth)
 
 from PyQt5.QtCore import QUrl, QTimer, Qt
 from PyQt5.QtGui import QKeySequence, QFontDatabase, QFont
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox, QShortcut
-from PyQt5.QtWebEngineWidgets import QWebEngineView as QWebView
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox, QShortcut, QInputDialog
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile
 from PyQt5.QtNetwork import *
 
 import sys
@@ -17,7 +18,7 @@ import re
 # File Locations (one item per line):
 ContentFilePath = "DBViewContent.txt"
 FontFilePath = "fnt.ttf"
-DEFAULT_DELAY_MS = 10000
+DEFAULT_DELAY_MS = 15000
 
 contentList = ['']
 
@@ -25,8 +26,13 @@ class MainWindow(QMainWindow):
     def __init__(self, contentList):
         super(MainWindow,self).__init__()   
 
-        self.webview = QWebView(self)
-        # Set up the pause control
+        self.webview = QWebEngineView(self)
+
+        profile = QWebEngineProfile.defaultProfile()
+        profile.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
+        print(profile.persistentStoragePath())
+        print(profile.cachePath())
+
         self.SetupLabels()
 
         self.contentList = load_url_from_file(ContentFilePath)
@@ -55,16 +61,16 @@ class MainWindow(QMainWindow):
         self.pause_label = QLabel("PAUSED", self)
         self.pause_label.setAlignment(Qt.AlignCenter)
         self.pause_label.setFont(font)
-        self.pause_label.setStyleSheet("background-color: rgba(64, 222, 251, 128); font-size: 32px;")
-        self.pause_label.setFixedSize(150, 60)  # Adjust width and height as needed
+        self.pause_label.setStyleSheet("background-color: rgba(64, 222, 251, 128); font-size: 48px;")
+        self.pause_label.setFixedSize(175, 80)  # Adjust width and height as needed
         self.pause_label.hide()
 
         self.no_content_label = QLabel("No content to display!", self)
         self.no_content_label.setAlignment(Qt.AlignCenter)
         self.no_content_label.setFont(font)
-        self.no_content_label.setStyleSheet("background-color: rgba(0, 150, 211, 128); font-size: 48px;")
+        self.no_content_label.setStyleSheet("background-color: rgba(0, 150, 211, 128); font-size: 64px;")
         self.no_content_label.hide()
-        
+
         # Add the layout to the central widget
         central_widget = QWidget()
         central_widget.setLayout(layout)
@@ -86,43 +92,62 @@ class MainWindow(QMainWindow):
         # Resize the label to match the window size
         self.no_content_label.setGeometry(self.rect())
 
-    def load(self,url):
-        self.webview.setUrl(QUrl(url))
-    
-    def load_next_url(self):         
-       
-            if (self.current_index < len(self.contentList)):          
-                url = self.contentList[self.current_index] 
-            
-                # differentiate between local files / embedded html, and URLs
-                item_is_a_file = os.path.exists(url)           
-                if item_is_a_file or url.startswith("<"):
-                    self.webview.setHtml(generate_html(url, item_is_a_file), QUrl(f'file:///{url}'))
-                else:
-                    self.webview.setUrl(QUrl(url))
-                self.current_index += 1     
+    def show_text_input_dialog(self):
+        print("Showing URL entry dialog!")
+        input_dialog = QInputDialog(self)
+        text, ok = input_dialog.getText(self, "Prompt", "Enter URL / Embedded HTML:")
 
+        if ok and text:
+            self.stop_active_timer()
+            self.load_next_url(text)
+    
+    def load_next_url(self, url):    
+
+        self.user_has_defined_source = url is not None
+
+       # Cycling through collection as usual
+        if url is None:
+            if (self.current_index < len(self.contentList)): 
+                    url = self.contentList[self.current_index] 
+                    self.current_index += 1   
+
+            # Start from the beginning of the collection if we've reached the end
             else:
-                # start from the beginning of the collection
                 self.current_index = 0
 
-            if not self.current_timer is None:
-                if self.current_timer.isActive():
-                    return
+        # differentiate between local files / embedded html, and URLs
+        item_is_a_file = os.path.exists(url)                
+        if item_is_a_file or url.startswith("<"):
+            self.webview.setHtml(generate_html(url, item_is_a_file), QUrl(f'file:///{url}'))
+        else:
+            self.webview.setUrl(QUrl(url))
+
+        # If a timer is running and we've not manually defined a source
+        # wait for it to copmlete before making a new one.
+        if not self.current_timer is None and not self.user_has_defined_source:
+            if self.current_timer.isActive():
+                return
           
-            # Start a new timer
-            if self.current_index > 0:
-                print(f"Starting new timer with content at index {self.current_index}")
-                self.current_timer = QTimer(self)
-                self.current_timer.setSingleShot(True)
-                self.current_timer.timeout.connect(self.load_next_url)
-                self.current_timer.start(DEFAULT_DELAY_MS)
-            else:
-                self.load_next_url()
+        # Start a new timer otherwise
+        if self.current_index > 0 or self.user_has_defined_source:
+            print(f"Starting new timer with content at index {self.current_index} for {DEFAULT_DELAY_MS}ms.")
+            self.current_timer = QTimer(self)
+            self.current_timer.setSingleShot(True)
+            self.current_timer.timeout.connect(lambda: self.load_next_url(None))
+            self.current_timer.start(DEFAULT_DELAY_MS)
+            print(f"Current timer has {self.current_timer.remainingTime()}ms left")
+
+            # immediately pause the timer if a source was maually defined
+            if self.user_has_defined_source:
+                self.pause_cycle()
+        else:
+            self.load_next_url(None)
+            
         
     # Cancels current timer and loads the next item in the queue
     def navigate_content(self, load_forward): 
         self.pause_label.setVisible(False)      
+        self.stop_active_timer()
 
         if (not load_forward):
             print("Loading previous item")
@@ -131,10 +156,11 @@ class MainWindow(QMainWindow):
             else:
                 self.current_index = len(self.contentList) - 1
         else:
+            if self.current_index == len(self.contentList):
+                self.current_index = 0
             print("Jumping to next item")
-
-        self.load_next_url()     
-
+        self.load_next_url(None)     
+    
     def pause_cycle(self):
         if self.current_timer.isActive():
             print(f'Timer paused with {self.current_timer.remainingTime()}ms remaining')
@@ -155,6 +181,11 @@ class MainWindow(QMainWindow):
 
     def adjustTitle(self):
         self.setWindowTitle(self.webview.title())
+        print(f"New window title is: {self.windowTitle()}")
+        if self.webview.title() == "about:blank":
+            self.no_content_label.show()
+        else:
+            self.no_content_label.hide()
 
 def main():
     app = QApplication(sys.argv)   
@@ -166,27 +197,29 @@ def main():
     #window.showFullScreen()
 
     # windowed for debug
-    window.setGeometry(100, 100, 800, 600)  # Set the desired width and height
+    window.setGeometry(100, 100, 800, 600)
     window.show()
 
-    # define which keypresses to monitor for
     window.close_shortcut = QShortcut(QKeySequence(Qt.Key_Escape),window)
-    window.next_item_shortcut = QShortcut(QKeySequence(Qt.Key_Right),window)
-    window.prev_item_shortcut = QShortcut(QKeySequence(Qt.Key_Left),window)
-    window.pause_timer_shortcut = QShortcut(QKeySequence(Qt.Key_Down),window)
-    
-    # attach our shortcuts to functions to create keyboard event handlers
+    window.manual_nav = QShortcut(QKeySequence(Qt.Key_Up),window)
+
     window.close_shortcut.activated.connect(window.close)
-    window.next_item_shortcut.activated.connect(lambda: window.navigate_content(True))
-    window.prev_item_shortcut.activated.connect(lambda: window.navigate_content(False))
-    window.pause_timer_shortcut.activated.connect(window.pause_cycle)
-    
+    window.manual_nav.activated.connect(window.show_text_input_dialog)
+
     # change window title on new connections
     window.webview.titleChanged.connect(window.adjustTitle)
     
     # kick off our content load-loop if we have content to show
     if len(window.contentList) > 0:
-        window.load_next_url()
+        window.next_item_shortcut = QShortcut(QKeySequence(Qt.Key_Right),window)
+        window.prev_item_shortcut = QShortcut(QKeySequence(Qt.Key_Left),window)
+        window.pause_timer_shortcut = QShortcut(QKeySequence(Qt.Key_Down),window)
+
+        window.next_item_shortcut.activated.connect(lambda: window.navigate_content(True))
+        window.prev_item_shortcut.activated.connect(lambda: window.navigate_content(False))
+        window.pause_timer_shortcut.activated.connect(window.pause_cycle)
+
+        window.load_next_url(None)
     sys.exit(app.exec_())
 
 # reads data from filepath established during '__init__'
