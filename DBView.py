@@ -35,7 +35,7 @@ class MainWindow(QMainWindow):
 
         self.SetupLabels()
 
-        self.contentList = load_url_from_file(ContentFilePath)
+        self.contentList = load_url_from_file(self, ContentFilePath)
 
         if len(self.contentList) == 0:
             self.no_content_label.show()
@@ -84,6 +84,15 @@ class MainWindow(QMainWindow):
         msg_box = QMessageBox()
         msg_box.setIcon(QMessageBox.Critical)
         msg_box.setText(f'Local font file "{FontFilePath}" not found!')
+        msg_box.setWindowTitle("Fatal error")
+        msg_box.exec_()
+        app.quit()
+
+    def missing_content_list_error(self):
+        app = QApplication(sys.argv)
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.Critical)
+        msg_box.setText(f'Local content list "{ContentFilePath}" not found!')
         msg_box.setWindowTitle("Fatal error")
         msg_box.exec_()
         app.quit()
@@ -224,10 +233,13 @@ def main():
     sys.exit(app.exec_())
 
 # reads data from filepath established during '__init__'
-def load_url_from_file(fpath):
-    with open(fpath, 'r') as file:
-        contentList = [line.strip() for line in file.readlines() if line.strip()]
-    return contentList
+def load_url_from_file(self, fpath):
+    try:
+        with open(fpath, 'r') as file:
+            contentList = [line.strip() for line in file.readlines() if line.strip()]
+        return contentList
+    except:
+        self.missing_content_list_error()
 
 def generate_html(item, item_is_a_file):
     raw_html = ''
