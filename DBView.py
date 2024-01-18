@@ -107,7 +107,8 @@ class MainWindow(QMainWindow):
         text, ok = input_dialog.getText(self, "Prompt", "Enter URL / Embedded HTML:")
 
         if ok and text:
-            self.stop_active_timer()
+            if self.current_timer.isActive():
+                self.stop_active_timer()
             self.load_next_url(text)
     
     def load_next_url(self, url):    
