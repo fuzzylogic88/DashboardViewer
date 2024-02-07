@@ -13,7 +13,9 @@ from PyQt5.QtNetwork import *
 
 import sys
 import os
+import time
 import re
+import asyncio
 
 # File Locations, CASE SENSITIVE!:
 ContentFilePath = "DBViewContent.txt"
@@ -34,11 +36,6 @@ class MainWindow(QMainWindow):
         print(profile.cachePath())
 
         self.SetupLabels()
-
-        self.contentList = load_url_from_file(self, ContentFilePath)
-
-        if len(self.contentList) == 0:
-            self.no_content_label.show()
 
         self.current_timer = QTimer(self)
         self.remaining_time = 0
@@ -65,7 +62,7 @@ class MainWindow(QMainWindow):
         self.pause_label.setFixedSize(175, 80)  # Adjust width and height as needed
         self.pause_label.hide()
 
-        self.no_content_label = QLabel("No content to display!", self)
+        self.no_content_label = QLabel("No content to display! Waiting...", self)
         self.no_content_label.setAlignment(Qt.AlignCenter)
         self.no_content_label.setFont(font)
         self.no_content_label.setStyleSheet("background-color: rgba(0, 150, 211, 128); font-size: 64px;")
@@ -111,13 +108,13 @@ class MainWindow(QMainWindow):
                 self.stop_active_timer()
             self.load_next_url(text)
     
-    def load_next_url(self, url):    
+    def load_next_url(self, url):   
+        self.load_url_from_file(ContentFilePath)
 
         self.user_has_defined_source = url is not None
-
        # Cycling through collection as usual
         if url is None:
-            if (self.current_index < len(self.contentList)): 
+            if (self.current_index < len(self.contentList)):
                     url = self.contentList[self.current_index] 
                     self.current_index += 1   
 
@@ -152,8 +149,7 @@ class MainWindow(QMainWindow):
             if self.user_has_defined_source:
                 self.pause_cycle()
         else:
-            self.load_next_url(None)
-            
+            self.load_next_url(None)            
         
     # Cancels current timer and loads the next item in the queue
     def navigate_content(self, load_forward): 
@@ -198,6 +194,24 @@ class MainWindow(QMainWindow):
         else:
             self.no_content_label.hide()
 
+        # reads data from filepath established during '__init__'
+    def load_url_from_file(self, fpath):
+        if (os.path.exists(fpath)):
+            try:
+                print("Updating data in content list")
+                with open(fpath, 'r') as file:
+                    self.contentList = [line.strip() for line in file.readlines() if line.strip()]
+                if len(self.contentList) == 0 and not self.user_has_defined_source:
+                    self.no_content_label.hide()
+
+            except:
+                # if it fails, try again after a short delay
+                print("Content load failed! Retrying in 1s...")
+                self.missing_content_list_error
+
+        else:
+            self.missing_content_list_error
+
 def main():
     app = QApplication(sys.argv)   
     window = MainWindow(contentList)
@@ -220,27 +234,17 @@ def main():
     # change window title on new connections
     window.webview.titleChanged.connect(window.adjustTitle)
     
-    # kick off our content load-loop if we have content to show
-    if len(window.contentList) > 0:
-        window.next_item_shortcut = QShortcut(QKeySequence(Qt.Key_Right),window)
-        window.prev_item_shortcut = QShortcut(QKeySequence(Qt.Key_Left),window)
-        window.pause_timer_shortcut = QShortcut(QKeySequence(Qt.Key_Down),window)
+    window.next_item_shortcut = QShortcut(QKeySequence(Qt.Key_Right),window)
+    window.prev_item_shortcut = QShortcut(QKeySequence(Qt.Key_Left),window)
+    window.pause_timer_shortcut = QShortcut(QKeySequence(Qt.Key_Down),window)
 
-        window.next_item_shortcut.activated.connect(lambda: window.navigate_content(True))
-        window.prev_item_shortcut.activated.connect(lambda: window.navigate_content(False))
-        window.pause_timer_shortcut.activated.connect(window.pause_cycle)
+    window.next_item_shortcut.activated.connect(lambda: window.navigate_content(True))
+    window.prev_item_shortcut.activated.connect(lambda: window.navigate_content(False))
+    window.pause_timer_shortcut.activated.connect(window.pause_cycle)
 
-        window.load_next_url(None)
+    # kick off our content load-loop
+    window.load_next_url(None)
     sys.exit(app.exec_())
-
-# reads data from filepath established during '__init__'
-def load_url_from_file(self, fpath):
-    try:
-        with open(fpath, 'r') as file:
-            contentList = [line.strip() for line in file.readlines() if line.strip()]
-        return contentList
-    except:
-        self.missing_content_list_error()
 
 def generate_html(item, item_is_a_file):
     raw_html = ''
