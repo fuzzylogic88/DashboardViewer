@@ -5,17 +5,14 @@
 # Press right arrow key to move to next URL, down arrow key to stop cycle, ESC to exit.
 # Press up arrow to enter URL manually (helpful for SSO auth)
 
-from PyQt5.QtCore import QUrl, QTimer, Qt
-from PyQt5.QtGui import QKeySequence, QFontDatabase, QFont
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox, QShortcut, QInputDialog
-from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile
-from PyQt5.QtNetwork import *
+from PyQt6.QtCore import QUrl, QTimer, Qt
+from PyQt6.QtGui import QFontDatabase, QFont, QKeySequence
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox, QShortcut, QInputDialog
+from PyQt6.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile
 
 import sys
 import os
-import time
 import re
-import asyncio
 
 # File Locations, CASE SENSITIVE!:
 ContentFilePath = "DBViewContent.txt"
@@ -26,13 +23,12 @@ contentList = ['']
 
 class MainWindow(QMainWindow):
     def __init__(self, contentList):
-        super(MainWindow,self).__init__()   
+        super(MainWindow, self).__init__()   
 
         self.webview = QWebEngineView(self)
         profile = QWebEngineProfile.defaultProfile()
-        profile.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
-        print(profile.persistentStoragePath())
-        print(profile.cachePath())
+        profile.setPersistentStoragePath(QWebEngineProfile.defaultProfile().persistentStoragePath())
+        profile.setCachePath(QWebEngineProfile.defaultProfile().cachePath())
 
         self.SetupLabels()
 
@@ -56,14 +52,14 @@ class MainWindow(QMainWindow):
 
         # Create a pause overlay label
         self.pause_label = QLabel("PAUSED", self)
-        self.pause_label.setAlignment(Qt.AlignCenter)
+        self.pause_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.pause_label.setFont(font)
         self.pause_label.setStyleSheet("background-color: rgba(64, 222, 251, 128); font-size: 48px;")
         self.pause_label.setFixedSize(175, 80)  # Adjust width and height as needed
         self.pause_label.hide()
 
         self.no_content_label = QLabel("No content to display! Waiting...", self)
-        self.no_content_label.setAlignment(Qt.AlignCenter)
+        self.no_content_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.no_content_label.setFont(font)
         self.no_content_label.setStyleSheet("background-color: rgba(0, 150, 211, 128); font-size: 64px;")
         self.no_content_label.hide()
@@ -73,25 +69,25 @@ class MainWindow(QMainWindow):
         central_widget.setLayout(layout)
 
         # Set up the initial content within the central widget
-        self.webview.page().setView(central_widget)
+        self.webview.setPage(central_widget)
         self.setCentralWidget(self.webview)
     
     def missing_font_error(self):
         app = QApplication(sys.argv)
         msg_box = QMessageBox()
-        msg_box.setIcon(QMessageBox.Critical)
+        msg_box.setIcon(QMessageBox.Icon.Critical)
         msg_box.setText(f'Local font file "{FontFilePath}" not found!')
         msg_box.setWindowTitle("Fatal error")
-        msg_box.exec_()
+        msg_box.exec()
         app.quit()
 
     def missing_content_list_error(self):
         app = QApplication(sys.argv)
         msg_box = QMessageBox()
-        msg_box.setIcon(QMessageBox.Critical)
+        msg_box.setIcon(QMessageBox.Icon.Critical)
         msg_box.setText(f'Local content list "{ContentFilePath}" not found!')
         msg_box.setWindowTitle("Fatal error")
-        msg_box.exec_()
+        msg_box.exec()
         app.quit()
 
     def resizeEvent(self, event):
@@ -126,12 +122,12 @@ class MainWindow(QMainWindow):
         if url is not None:
             item_is_a_file = os.path.exists(url)                
             if item_is_a_file or url.startswith("<"):
-                self.webview.setHtml(generate_html(url, item_is_a_file), QUrl(f'file:///{url}'))
+                self.webview.setHtml(generate_html(url, item_is_a_file), QUrl.fromLocalFile(url))
             else:
                 self.webview.setUrl(QUrl(url))
 
         # If a timer is running and we've not manually defined a source
-        # wait for it to copmlete before making a new one.
+        # wait for it to complete before making a new one.
         if not self.current_timer is None and not self.user_has_defined_source:
             if self.current_timer.isActive():
                 return
@@ -148,7 +144,7 @@ class MainWindow(QMainWindow):
             self.last_accessed_content = self.webview.url().toString();
             print(f"Last accessed content saved: {self.last_accessed_content}")
 
-            # immediately pause the timer if a source was maually defined
+            # immediately pause the timer if a source was manually defined
             if self.user_has_defined_source:
                 self.pause_cycle()
         else:
@@ -254,7 +250,7 @@ def main():
 
     # kick off our content load-loop
     window.load_next_url(None)
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 def generate_html(item, item_is_a_file):
     raw_html = ''
