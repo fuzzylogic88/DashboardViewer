@@ -5,10 +5,14 @@
 # Press right arrow key to move to next URL, down arrow key to stop cycle, ESC to exit.
 # Press up arrow to enter URL manually (helpful for SSO auth)
 
+# requries: qt6-wayland, python3-pyqt6.qtwebengine, python3-pyqt6
+
+
 from PyQt6.QtCore import QUrl, QTimer, Qt
-from PyQt6.QtGui import QFontDatabase, QFont, QKeySequence
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox, QShortcut, QInputDialog
-from PyQt6.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile
+from PyQt6.QtGui import QFontDatabase, QFont, QKeySequence, QShortcut
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox, QInputDialog
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEngineProfile
 
 import sys
 import os
@@ -16,7 +20,7 @@ import re
 
 # File Locations, CASE SENSITIVE!:
 ContentFilePath = "DBViewContent.txt"
-FontFilePath = "fnt.TTF"
+FontFilePath = "fnt.ttf"
 DEFAULT_DELAY_MS = 60000
 
 contentList = ['']
@@ -26,29 +30,26 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__()   
 
         self.webview = QWebEngineView(self)
-        profile = QWebEngineProfile.defaultProfile()
-        profile.setPersistentStoragePath(QWebEngineProfile.defaultProfile().persistentStoragePath())
-        profile.setCachePath(QWebEngineProfile.defaultProfile().cachePath())
-
-        self.SetupLabels()
+        self.setup_web_engine_profile()
+        self.setup_labels()
 
         self.last_accessed_content = ""
         self.current_timer = QTimer(self)
         self.remaining_time = 0
         self.timers_are_paused = False
         self.current_index = 0
+
+    def setup_web_engine_profile(self):
+        profile = QWebEngineProfile.defaultProfile()
+        profile.setPersistentStoragePath(QWebEngineProfile.defaultProfile().persistentStoragePath())
+        profile.setCachePath(QWebEngineProfile.defaultProfile().cachePath())
         
-    def SetupLabels(self):
+    def setup_labels(self):
         # Create a layout for the central widget
         layout = QVBoxLayout()
 
         # Load font from local file to use for labels
-        if os.path.exists(FontFilePath):  
-            font_id = QFontDatabase.addApplicationFont(FontFilePath)
-            font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
-            font = QFont(font_family)
-        else:
-            self.missing_font_error()
+        font = self.load_font_from_file()
 
         # Create a pause overlay label
         self.pause_label = QLabel("PAUSED", self)
@@ -58,7 +59,7 @@ class MainWindow(QMainWindow):
         self.pause_label.setFixedSize(175, 80)  # Adjust width and height as needed
         self.pause_label.hide()
 
-        self.no_content_label = QLabel("No content to display! Waiting...", self)
+        self.no_content_label = QLabel("No content to display!\nWaiting...", self)
         self.no_content_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.no_content_label.setFont(font)
         self.no_content_label.setStyleSheet("background-color: rgba(0, 150, 211, 128); font-size: 64px;")
@@ -69,9 +70,18 @@ class MainWindow(QMainWindow):
         central_widget.setLayout(layout)
 
         # Set up the initial content within the central widget
-        self.webview.setPage(central_widget)
+        #self.webview.setPage(central_widget)
         self.setCentralWidget(self.webview)
-    
+        
+    def load_font_from_file(self):
+        if os.path.exists(FontFilePath):
+            font_id = QFontDatabase.addApplicationFont(FontFilePath)
+            font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
+            return QFont(font_family)
+        else:
+            self.missing_font_error()
+            sys.exit(1)
+
     def missing_font_error(self):
         app = QApplication(sys.argv)
         msg_box = QMessageBox()
@@ -105,6 +115,9 @@ class MainWindow(QMainWindow):
             self.load_next_url(text)
     
     def load_next_url(self, url):   
+
+        #todo: fix content ordering bug!
+        
         self.user_has_defined_source = url is not None
         
        # Cycling through collection as usual
@@ -151,32 +164,28 @@ class MainWindow(QMainWindow):
             self.load_next_url(None)            
         
     # Cancels current timer and loads the next item in the queue
-    def navigate_content(self, load_forward): 
-        self.pause_label.setVisible(False)      
+    def navigate_content(self, load_forward):
+        self.pause_label.setVisible(False)
         self.stop_active_timer()
 
-        if (not load_forward):
+        if not load_forward:
             print("Loading previous item")
-            if (self.current_index - 2 >= 0):
-                self.current_index -= 2
-            else:
-                self.current_index = len(self.contentList) - 1
+            self.current_index = (self.current_index - 2) % len(self.contentList)
         else:
-            if self.current_index == len(self.contentList):
-                self.current_index = 0
             print("Jumping to next item")
-        self.load_next_url(None)     
-    
+            self.current_index = (self.current_index + 1) % len(self.contentList)
+
+        self.load_next_url(None)
+
     def pause_cycle(self):
         if self.current_timer.isActive():
             print(f'Timer paused with {self.current_timer.remainingTime()}ms remaining')
             self.remaining_time = self.current_timer.remainingTime()
-            self.pause_label.setVisible(True)
-            self.current_timer.stop()
         else:
             print(f'Timer resumed with {self.remaining_time}ms remaining')
-            self.pause_label.setVisible(False)
-            self.current_timer.start(self.remaining_time)
+
+        self.pause_label.setVisible(not self.pause_label.isVisible())
+        self.current_timer.stop() if self.current_timer.isActive() else self.current_timer.start(self.remaining_time)
 
     # stops active timer and notes remaining time, supposing we wanted to continue
     def stop_active_timer(self):
@@ -231,8 +240,8 @@ def main():
     window.setGeometry(100, 100, 800, 600)
     window.show()
 
-    window.close_shortcut = QShortcut(QKeySequence(Qt.Key_Escape),window)
-    window.manual_nav = QShortcut(QKeySequence(Qt.Key_Up),window)
+    window.close_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Escape),window)
+    window.manual_nav = QShortcut(QKeySequence(Qt.Key.Key_Up),window)
 
     window.close_shortcut.activated.connect(window.close)
     window.manual_nav.activated.connect(window.show_text_input_dialog)
@@ -240,9 +249,9 @@ def main():
     # change window title on new connections
     window.webview.titleChanged.connect(window.adjustTitle)
     
-    window.next_item_shortcut = QShortcut(QKeySequence(Qt.Key_Right),window)
-    window.prev_item_shortcut = QShortcut(QKeySequence(Qt.Key_Left),window)
-    window.pause_timer_shortcut = QShortcut(QKeySequence(Qt.Key_Down),window)
+    window.next_item_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Right),window)
+    window.prev_item_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Left),window)
+    window.pause_timer_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Down),window)
 
     window.next_item_shortcut.activated.connect(lambda: window.navigate_content(True))
     window.prev_item_shortcut.activated.connect(lambda: window.navigate_content(False))
@@ -267,7 +276,7 @@ def generate_html(item, item_is_a_file):
                 <style>
                     body {{
                             margin: 0;
-                            background-color: #202248;
+                            background-color: #000000;
                             overflow: hidden;
                     }}
                     
