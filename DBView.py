@@ -29,7 +29,6 @@ class MainWindow(QMainWindow):
         super(MainWindow,self).__init__()   
 
         self.webview = QWebEngineView(self)
-
         profile = QWebEngineProfile.defaultProfile()
         profile.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
         print(profile.persistentStoragePath())
@@ -37,6 +36,7 @@ class MainWindow(QMainWindow):
 
         self.SetupLabels()
 
+        self.last_accessed_content = ""
         self.current_timer = QTimer(self)
         self.remaining_time = 0
         self.timers_are_paused = False
@@ -109,11 +109,11 @@ class MainWindow(QMainWindow):
             self.load_next_url(text)
     
     def load_next_url(self, url):   
-        self.load_url_from_file(ContentFilePath)
-
         self.user_has_defined_source = url is not None
+        
        # Cycling through collection as usual
         if url is None:
+            self.load_url_from_file(ContentFilePath) # only reload data if no URL was defined.
             if (self.current_index < len(self.contentList)):
                     url = self.contentList[self.current_index] 
                     self.current_index += 1   
@@ -144,6 +144,9 @@ class MainWindow(QMainWindow):
             self.current_timer.timeout.connect(lambda: self.load_next_url(None))
             self.current_timer.start(DEFAULT_DELAY_MS)
             print(f"Current timer has {self.current_timer.remainingTime()}ms left")
+
+            self.last_accessed_content = self.webview.url().toString();
+            print(f"Last accessed content saved: {self.last_accessed_content}")
 
             # immediately pause the timer if a source was maually defined
             if self.user_has_defined_source:
@@ -202,15 +205,22 @@ class MainWindow(QMainWindow):
                 with open(fpath, 'r') as file:
                     self.contentList = [line.strip() for line in file.readlines() if line.strip()]
                 if len(self.contentList) == 0 and not self.user_has_defined_source:
-                    self.no_content_label.hide()
+                    print("No data in file! Deferring to last-accessed content...")
+                    if (self.last_accessed_content is not None):
+                        self.load_next_url(self.last_accessed_content)
+                    else:
+                        sys.exit(1)
 
             except:
                 # if it fails, try again after a short delay
-                print("Content load failed! Retrying in 1s...")
-                self.missing_content_list_error
-
+                print("Content load failed! Deferring to last-accessed content...")
+                if (self.last_accessed_content is not None):
+                    self.load_next_url(self.last_accessed_content)
+                else:
+                    sys.exit(1)
         else:
-            self.missing_content_list_error
+            print("Content file inaccessible! Retrying in 1s...")
+            # show content error message on display,
 
 def main():
     app = QApplication(sys.argv)   
