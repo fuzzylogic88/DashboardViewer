@@ -328,5 +328,4 @@ def generate_html(item, item_is_a_file):
     return raw_html
   
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
     main()
