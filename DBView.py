@@ -255,13 +255,12 @@ def main():
     window.setWindowTitle('DBView')
 
     # creates a borderless window and displays the content fullscreen
-    #window.setWindowFlags(Qt.FramelessWindowHint)
-    #window.showFullScreen()
+    window.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+    window.showFullScreen()
 
     # windowed for debug
-    window.setGeometry(100, 100, 800, 600)
-
-    window.show()
+    #window.setGeometry(100, 100, 800, 600)
+    #window.show()
 
     window.webview.titleChanged.connect(window.adjustTitle)
     
