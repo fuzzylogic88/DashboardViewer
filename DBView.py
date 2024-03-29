@@ -34,7 +34,7 @@ class MainWindow(QMainWindow):
         self.qwebpage = QWebEnginePage(self.profile)
         self.webview.setPage(self.qwebpage)
 
-        self.setup_labels()
+        self.setup_labels() 
 
         self.last_accessed_content = ""
         self.current_timer = QTimer(self)
@@ -48,7 +48,6 @@ class MainWindow(QMainWindow):
         self.profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
         self.profile.setPersistentStoragePath(os.path.abspath('data'))
         self.profile.setCachePath(os.path.abspath('data'))
-
         self.profile.cookieStore().cookieAdded.connect(self.on_cookie_added)
 
     def on_cookie_added(self, cookie):
@@ -131,29 +130,38 @@ class MainWindow(QMainWindow):
             self.current_timer.timeout.connect(lambda: self.load_next_url(None))
             self.current_timer.start(ms)
             print(f"Current timer has {self.current_timer.remainingTime()}ms left")
-
-    def load_next_url(self, url):   
-        self.user_has_defined_source = url is not None  
+            
+    def load_next_url(self, url):
+        self.user_has_defined_source = url is not None
 
        # Cycling through collection as usual
         if url is None:
             self.load_url_from_file(ContentFilePath) # only reload data if no URL was defined.
             if (self.current_index < len(self.contentList)):
-                    url = self.contentList[self.current_index] 
-                    self.current_index += 1   
+                    url = self.contentList[self.current_index]
+                    self.current_index += 1
 
             # Start from the beginning of the collection if we've reached the end
             else:
                 self.current_index = 0
 
-        # differentiate between local files / embedded html, and URLs
         if url is not None:
-            item_is_a_file = os.path.exists(url)                
+            item_is_a_file = os.path.exists(url)  
+
+            # Local files / embedded html, and URLs             
             if item_is_a_file or url.startswith("<"):
-                self.webview.setHtml(generate_html(url, item_is_a_file), QUrl.fromLocalFile(url))
+                base_url = ""
+                newhtml = generate_html(url, item_is_a_file)
+                if item_is_a_file:
+                    base_url = QUrl.fromLocalFile(f"/{url}")
+                else:
+                    base_url = get_base_url_from_iframe(newhtml)
+                self.qwebpage.setHtml(newhtml, baseUrl=base_url)  
+            
+            # Normal URLs
             else:
-                self.qwebpage.load(QUrl(url))
-                self.setCentralWidget(self.webview)   
+                self.qwebpage.load(QUrl(url))                         
+            self.setCentralWidget(self.webview)  
 
         # If a timer is running and we've not manually defined a source
         # wait for it to complete before making a new one.
@@ -165,11 +173,11 @@ class MainWindow(QMainWindow):
         if self.current_index > 0 or self.user_has_defined_source:
             self.start_new_timer(DEFAULT_DELAY_MS)
 
-            self.last_accessed_content = self.webview.url().toString();
+            self.last_accessed_content = url
             print(f"Last accessed content saved: {self.last_accessed_content}")
             
         else:
-            self.load_next_url(None)       
+            self.load_next_url(None)   
 
     # Cancels current timer and loads the next item in the queue
     def navigate_content(self, load_forward):
@@ -255,12 +263,12 @@ def main():
     window.setWindowTitle('DBView')
 
     # creates a borderless window and displays the content fullscreen
-    window.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-    window.showFullScreen()
+    #window.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+    #window.showFullScreen()
 
     # windowed for debug
-    #window.setGeometry(100, 100, 800, 600)
-    #window.show()
+    window.setGeometry(100, 100, 800, 600)
+    window.show()
 
     window.webview.titleChanged.connect(window.adjustTitle)
     
@@ -282,6 +290,14 @@ def main():
     window.load_next_url(None)
     sys.exit(app.exec())
 
+def get_base_url_from_iframe(iframe_src):
+    # Parse the iframe src URL
+    src_url = QUrl(iframe_src)
+
+    # Infer base URL from the src URL
+    base_url = QUrl(f"{src_url.scheme()}://{src_url.host()}")      
+    return base_url
+    
 def generate_html(item, item_is_a_file):
     raw_html = ''
 
