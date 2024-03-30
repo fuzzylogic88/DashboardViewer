@@ -154,9 +154,11 @@ class MainWindow(QMainWindow):
                 newhtml = generate_html(url, item_is_a_file)
                 if item_is_a_file:
                     base_url = QUrl.fromLocalFile(f"/{url}")
-                else:
-                    base_url = get_base_url_from_iframe(newhtml)
-                self.qwebpage.setHtml(newhtml, baseUrl=base_url)  
+                    self.qwebpage.setHtml(newhtml, baseUrl=base_url)  
+                else:           
+                    pattern = r'src="(.*?)"'
+                    base_url = re.search(pattern, newhtml).group(1)
+                    self.qwebpage.load(QUrl(base_url))  
             
             # Normal URLs
             else:
@@ -289,18 +291,10 @@ def main():
     # kick off our content load-loop
     window.load_next_url(None)
     sys.exit(app.exec())
-
-def get_base_url_from_iframe(iframe_src):
-    # Parse the iframe src URL
-    src_url = QUrl(iframe_src)
-
-    # Infer base URL from the src URL
-    base_url = QUrl(f"{src_url.scheme()}://{src_url.host()}")      
-    return base_url
     
 def generate_html(item, item_is_a_file):
     raw_html = ''
-
+    
     # Image files
     if (item_is_a_file):       
         image_path = 'file:///'
@@ -336,7 +330,7 @@ def generate_html(item, item_is_a_file):
         raw_html += '</body></html>'
 
         # Regular expression to find width and height attributes
-        pattern = re.compile(r'width="(\d+)" height="(\d+)"')
+        pattern = re.compile(r'width="\d+(\.\d+)?" height="\d+(\.\d+)?"')
 
         # Replace width and height attributes with fullscreen style attribute
         raw_html = re.sub(pattern, r'style="min-width: 100%; min-height: 100vh;"', raw_html)   
