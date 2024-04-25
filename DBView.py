@@ -27,8 +27,9 @@ contentList = ['']
 
 class MainWindow(QMainWindow):
     def __init__(self, contentList):
-        super(MainWindow, self).__init__()   
+        super(MainWindow, self).__init__() 
 
+        self.showEvent = self.on_shown_event
         self.webview = QWebEngineView(self)
         self.setup_web_engine_profile()
         self.qwebpage = QWebEnginePage(self.profile)
@@ -41,6 +42,30 @@ class MainWindow(QMainWindow):
         self.remaining_time = 0
         self.timers_are_paused = False
         self.current_index = 0
+
+        self.showMaximized()
+        
+    def on_shown_event(self, event):
+        # creates a borderless window and displays the content fullscreen
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)          
+        # Adjust geometry after a short delay
+        QTimer.singleShot(1000, self.adjustGeometry)  
+
+    def adjustGeometry(self):
+        self.setWindowState(Qt.WindowState.WindowMaximized)
+        QTimer.singleShot(500, self.move_to_edge)
+
+    def move_to_edge(self):
+        fr_geom = self.frameGeometry()
+        print(fr_geom)
+        screen_geometry = QApplication.primaryScreen().geometry()
+        h_diff = screen_geometry.height() - fr_geom.height()
+        print(h_diff)
+        self.setGeometry(screen_geometry.left(), 
+                         screen_geometry.top(), 
+                         screen_geometry.width(), 
+                         screen_geometry.height())
+
 
     def setup_web_engine_profile(self):
         self.profile = QWebEngineProfile('WebEngineDefaultProfile')
@@ -264,14 +289,7 @@ def main():
     window = MainWindow(contentList)
     window.setWindowTitle('DBView')
 
-    # creates a borderless window and displays the content fullscreen
-    #window.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-    #window.showFullScreen()
-
-    # windowed for debug
-    window.setGeometry(100, 100, 800, 600)
     window.show()
-
     window.webview.titleChanged.connect(window.adjustTitle)
     
     window.close_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Escape),window)
