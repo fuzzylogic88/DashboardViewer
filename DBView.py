@@ -47,25 +47,13 @@ class MainWindow(QMainWindow):
         
     def on_shown_event(self, event):
         # creates a borderless window and displays the content fullscreen
-        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)          
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
+        
         # Adjust geometry after a short delay
-        QTimer.singleShot(1000, self.adjustGeometry)  
+        QTimer.singleShot(1500, self.adjustGeometry)  
 
     def adjustGeometry(self):
         self.setWindowState(Qt.WindowState.WindowMaximized)
-        QTimer.singleShot(500, self.move_to_edge)
-
-    def move_to_edge(self):
-        fr_geom = self.frameGeometry()
-        print(fr_geom)
-        screen_geometry = QApplication.primaryScreen().geometry()
-        h_diff = screen_geometry.height() - fr_geom.height()
-        print(h_diff)
-        self.setGeometry(screen_geometry.left(), 
-                         screen_geometry.top(), 
-                         screen_geometry.width(), 
-                         screen_geometry.height())
-
 
     def setup_web_engine_profile(self):
         self.profile = QWebEngineProfile('WebEngineDefaultProfile')
